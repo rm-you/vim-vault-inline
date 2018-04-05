@@ -16,6 +16,13 @@ Use your plugin manager of choice.
   - Add `Plug 'https://github.com/rm-you/vim-vault-inline'` to .vimrc
   - Run `:PlugInstall`
 
+## Usage
+
+Use the command :VaultEncryptionToggle when the cursor is inside a multi-line
+yaml block. The author recommends adding a binding to your vimrc, like:
+
+`nmap ,v :VaultEncryptionToggle<CR>`
+
 ## Todo
 
 1. Write tests
