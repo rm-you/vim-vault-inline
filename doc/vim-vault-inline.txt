@@ -20,6 +20,9 @@ The  `ansible-vault` executable must be found in the user's PATH.
 
 3. Usage                                               *vim-vault-inline-usage*
 
+Set the variable `VAULT_PASSWORD_FILE` in your environment to the absolute
+path of your ansible-vault password file.
+
 Use the command :VaultEncryptionToggle when the cursor is inside a multi-line
 yaml block. The author recommends adding a binding to your vimrc, like:
 
