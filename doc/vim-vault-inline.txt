@@ -20,8 +20,10 @@ The  `ansible-vault` executable must be found in the user's PATH.
 
 3. Usage                                               *vim-vault-inline-usage*
 
-Use the command :AVEncrypt or :AVDecrypt when the cursor is inside a
-multi-line yaml block.
+Use the command :VaultEncryptionToggle when the cursor is inside a multi-line
+yaml block. The author recommends adding a binding to your vimrc, like:
+
+nmap ,v :VaultEncryptionToggle<CR>
 
 4. Licence                                           *vim-vault-inline-licence*
 

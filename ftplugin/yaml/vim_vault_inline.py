@@ -1,19 +1,27 @@
+from distutils import spawn
 import os
 import re
 import subprocess
-from distutils import spawn
 
 import vim
 
 MODE_ENCRYPT = 'encrypt'
 MODE_DECRYPT = 'decrypt'
+PATTERN_VAULT_OR_PIPE = r':\s*(!vault)?\s*\|'
 
 
 def get_indent_level(line):
-    tabstop = 4  # TODO: get this from vim variable
+    tabstop = int(vim.eval("&tabstop"))
     line = line.expandtabs(tabstop)
     indent = 0 if line.isspace() else len(line) - len(line.lstrip())
     return indent
+
+
+def prev_line(line_num):
+    # Don't go off the end of the buffer
+    if line_num < 0:
+        return None, line_num
+    return vim.current.buffer[line_num], line_num - 1
 
 
 def next_line(line_num):
@@ -53,19 +61,19 @@ class VaultHandler(object):
     _data = None
     _lines = None
     _indent_string = ""
-
-    def __init__(self, expect_encrypted):
-        self._expect_encrypted = expect_encrypted
+    _encrypted_data = None
 
     @property
     def text(self):
         if not self._attempted:
             self._attempted = True
             data = self._read_data_block()
+            # print(data)
+            # print(self._lines)
             if data:
                 self._data = vault_subshell(
                     data,
-                    mode=(MODE_DECRYPT if self._expect_encrypted else
+                    mode=(MODE_DECRYPT if self._encrypted_data else
                           MODE_ENCRYPT)
                 )
         return self._data
@@ -82,53 +90,82 @@ class VaultHandler(object):
 
     def _read_data_block(self):
         # Grab the current cursor position from vim
-        start_line = curr_line = vim.current.window.cursor[0]
+        curr_line = vim.current.window.cursor[0]
         # The cursor position is one-indexed, but the buffer is zero-indexed
         curr_line -= 1
 
-        # Grab the first line of the secret definition (with !vault)
+        # Find the definition line of the current block
+        start_line = vim.current.buffer[curr_line]
+        if re.search(PATTERN_VAULT_OR_PIPE, start_line):
+            # We're already at the definition line
+            pass
+        else:
+            indent_level = get_indent_level(start_line)
+            line, curr_line = prev_line(curr_line)
+            while line and get_indent_level(line) == indent_level:
+                line, curr_line = prev_line(curr_line)
+            curr_line += 1
+        header_line_num = curr_line
+
+        # Get the first line
         line, curr_line = next_line(curr_line)
 
-        # Check that there is actually a secret starting here
-        if '!vault' not in line:
+        # Check if there is actually a secret starting here
+        if not re.search(PATTERN_VAULT_OR_PIPE, line):
             print("Line is not the start of a vault secret!")
             return
 
         # Now get the first line of the actual secret
         line, curr_line = next_line(curr_line)
 
-        # Check that it's actually encrypted if it should be
-        if self._expect_encrypted and '$ANSIBLE_VAULT' not in line:
-            print("This is not an encrypted secret!")
-            return
-        # Or correctly unencrypted if it should be
-        elif not self._expect_encrypted and '$ANSIBLE_VAULT' in line:
-            print("This is secret is already encrypted!")
-            return
-
         # Save indentation data
         self._indent_string = re.search(r'^\s+', line).group(0)
         indent_level = get_indent_level(line)
 
-        # Our secret starts with this initial line and a newline
-        secret = "{}\n".format(line.strip())
+        # Our data starts with this line
+        data = line.strip(' \t')
 
-        # The secret continues with the following lines appended, until the
+        # Is the data already encrypted or not?
+        if '$ANSIBLE_VAULT;' in data:
+            self._encrypted_data = True
+            # Need a newline after the encrypted data's header
+            data += '\n'
+        else:
+            self._encrypted_data = False
+
+        # The data continues with the following lines appended, until the
         # indentation level changes.
         line, curr_line = next_line(curr_line)
         while line and get_indent_level(line) == indent_level:
-            secret += line.strip()
+            # Preserve newlines for non-encrypted data
+            if not self._encrypted_data:
+                data += '\n'
+            data += line.strip(' \t')
             line, curr_line = next_line(curr_line)
 
-        self._lines = (start_line, curr_line - 1)
+        self._lines = (header_line_num, curr_line - 1)
 
-        return secret
+        return data
 
     def replace_block(self):
         if self.text:
             start = self.lines[0]
             end = self.lines[1]
-            del vim.current.buffer[start:end]
+
+            # Set up the starting line
+            start_line_tokens = vim.current.buffer[start].split(':')
+            start_line = start_line_tokens[0]
+            # We know the encryption state of the old data, so do the opposite
+            if self._encrypted_data:
+                start_line += ": |"
+            else:
+                start_line += ": !vault |"
+            vim.current.buffer[start] = start_line
+
+            # Delete all the old data lines
+            del vim.current.buffer[start+1:end]
+
+            # Replace them with the new lines
             lines = ["{indent}{line}".format(indent=self.indent_string, line=l)
                      for l in self.text.split('\n')]
-            vim.current.buffer.append(lines, start)
+            vim.current.buffer.append(lines, start + 1)
