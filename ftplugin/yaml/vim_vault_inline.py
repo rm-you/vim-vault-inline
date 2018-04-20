@@ -54,8 +54,7 @@ def vault_subshell(string, mode):
             return
 
         vault_command = (
-            'ansible-vault', mode, '/dev/stdin',
-            '--output=/dev/stdout',
+            'ansible-vault', mode, '-',
             '--vault-password-file', pass_fn
         )
         vault = subprocess.Popen(vault_command,
