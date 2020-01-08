@@ -62,6 +62,7 @@ def vault_subshell(string, mode):
                                  stdout=subprocess.PIPE)
         out, _ = vault.communicate(input=string)
         if out:
+            out = out.decode('UTF-8')
             return out.strip()
         else:
             print("Could not encrypt value.")
@@ -81,11 +82,9 @@ class VaultHandler(object):
         if not self._attempted:
             self._attempted = True
             data = self._read_data_block()
-            # print(data)
-            # print(self._lines)
             if data:
                 self._data = vault_subshell(
-                    data,
+                    data.encode('UTF-8'),
                     mode=(MODE_DECRYPT if self._encrypted_data else
                           MODE_ENCRYPT)
                 )
